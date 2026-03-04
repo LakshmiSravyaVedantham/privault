@@ -1,0 +1,295 @@
+{
+  "project": "privault",
+  "branchName": "ralph/privault-core",
+  "description": "privault — Local-only AES-256-GCM encrypted personal vault for passwords, health records, banking info, and secure notes. Zero cloud, zero telemetry, AI-resistant.",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Scaffold project structure with pyproject.toml",
+      "description": "As a developer, I need the project skeleton so that all other stories have a valid package to build on.",
+      "acceptanceCriteria": [
+        "pyproject.toml exists with name='privault', requires-python='>=3.10'",
+        "dependencies: typer, cryptography, argon2-cffi, pyperclip, pydantic",
+        "dev dependencies: pytest, pytest-cov, mypy, black, isort, flake8",
+        "src/privault/__init__.py exists with version='0.1.0'",
+        "src/privault/cli.py, crypto.py, vault.py, storage.py, models.py, clipboard.py, audit.py all exist as empty modules",
+        "tests/__init__.py and tests/conftest.py exist",
+        "[project.scripts] entry: privault = 'privault.cli:app'",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-002",
+      "title": "Implement crypto module (Argon2id + AES-256-GCM)",
+      "description": "As a developer, I need encryption primitives so that all vault data can be encrypted and decrypted securely.",
+      "acceptanceCriteria": [
+        "crypto.py exports: derive_key(password: str, salt: bytes) -> bytes",
+        "derive_key uses Argon2id with memory_cost=65536, time_cost=3, parallelism=4",
+        "crypto.py exports: encrypt(key: bytes, plaintext: bytes) -> bytes",
+        "crypto.py exports: decrypt(key: bytes, ciphertext: bytes) -> bytes",
+        "encrypt uses AES-256-GCM with random 12-byte nonce prepended to output",
+        "decrypt raises ValueError on authentication failure (wrong key or tampered data)",
+        "generate_salt() -> bytes returns 32 cryptographically random bytes",
+        "tests/test_crypto.py: encrypt then decrypt round-trip returns original plaintext",
+        "tests/test_crypto.py: decrypt with wrong key raises ValueError",
+        "tests/test_crypto.py: two encryptions of same plaintext produce different ciphertext (nonce randomness)",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-003",
+      "title": "Implement storage module (encrypted SQLite)",
+      "description": "As a developer, I need an encrypted storage layer so that all entries are stored as ciphertext in SQLite.",
+      "acceptanceCriteria": [
+        "storage.py exports VaultStorage class with __init__(vault_path: Path, session_key: bytes)",
+        "VaultStorage.init_db() creates SQLite tables: vault_meta (salt, version, created_at), entries (id TEXT PK, category TEXT, encrypted_data BLOB, created_at TEXT, updated_at TEXT)",
+        "VaultStorage.write_entry(entry_id: str, category: str, data: dict) encrypts data JSON and stores blob",
+        "VaultStorage.read_entry(entry_id: str) -> dict decrypts and returns data",
+        "VaultStorage.list_entries(category: Optional[str]) -> list[dict] returns id+category+created_at only (no decryption)",
+        "VaultStorage.delete_entry(entry_id: str) removes from database",
+        "tests/test_storage.py: write then read returns original dict",
+        "tests/test_storage.py: raw sqlite3 read of the blob is NOT the original plaintext (ciphertext on disk)",
+        "tests/test_storage.py: read with wrong key raises ValueError",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-004",
+      "title": "Implement models for all four entry types",
+      "description": "As a developer, I need typed data models so that all entry types are validated before encryption.",
+      "acceptanceCriteria": [
+        "models.py exports PasswordEntry(site: str, username: str, password: str, url: str = '', notes: str = '')",
+        "models.py exports HealthEntry(provider: str, entry_type: str, value: str, notes: str = '')",
+        "models.py exports BankEntry(institution: str, account_type: str, account_number: str, routing_number: str = '', notes: str = '')",
+        "models.py exports NoteEntry(title: str, body: str, tags: list[str] = [])",
+        "All models are Pydantic BaseModel subclasses",
+        "Each model has a .to_dict() -> dict method",
+        "Each model has a classmethod .from_dict(d: dict) -> Self",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-005",
+      "title": "Implement vault session management (init, unlock, lock)",
+      "description": "As a user, I need to initialize a new vault and unlock/lock it with my master password.",
+      "acceptanceCriteria": [
+        "vault.py exports VaultSession class",
+        "VaultSession.init(vault_path: Path, master_password: str) creates new vault: generates salt, derives key, creates DB, returns session",
+        "VaultSession.unlock(vault_path: Path, master_password: str) -> VaultSession reads salt from DB, derives key, validates by reading a known test entry",
+        "VaultSession.lock() zeros the session key bytes in memory",
+        "VaultSession raises VaultNotFoundError if vault_path does not exist on unlock",
+        "VaultSession raises WrongPasswordError if decryption fails on unlock",
+        "vault.py exports get_default_vault_path() -> Path returning Path.home() / '.privault' / 'vault.db'",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-006",
+      "title": "Implement clipboard module with 30-second auto-clear",
+      "description": "As a user, I need secure clipboard copy that automatically clears after 30 seconds so AI/other processes cannot read my secrets.",
+      "acceptanceCriteria": [
+        "clipboard.py exports copy_with_autoclean(secret: str, timeout: int = 30)",
+        "Function copies secret to clipboard using pyperclip",
+        "Starts a background daemon thread that clears clipboard after timeout seconds",
+        "Prints to stderr: 'Copied to clipboard. Will clear in 30 seconds.'",
+        "Thread is daemon=True so it does not block process exit",
+        "tests/test_clipboard.py: after timeout, clipboard content is empty string",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-007",
+      "title": "Implement audit log module",
+      "description": "As a user, I need a tamper-evident local log of every vault access so I can see if anything suspicious happened.",
+      "acceptanceCriteria": [
+        "audit.py exports AuditLog class with __init__(log_path: Path, hmac_key: bytes)",
+        "AuditLog.log(action: str, entry_id: str = '', category: str = '') appends: timestamp|action|entry_id|category|HMAC",
+        "HMAC is computed over the line content using SHA-256",
+        "AuditLog.read() -> list[dict] parses and verifies each line's HMAC; raises AuditTampered on mismatch",
+        "tests/test_audit.py: log then read returns same entries",
+        "tests/test_audit.py: manually editing a log line causes AuditTampered on read",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-008",
+      "title": "Implement 'privault init' CLI command",
+      "description": "As a user, I need to create a new vault with a master password from the command line.",
+      "acceptanceCriteria": [
+        "cli.py has @app.command() 'init' that calls VaultSession.init()",
+        "Prompts for master password with confirmation (typer.prompt with hide_input=True, confirmation_prompt=True)",
+        "Creates ~/.privault/ directory if it does not exist",
+        "Sets vault file permissions to 0o600",
+        "Prints: 'Vault created at ~/.privault/vault.db'",
+        "Raises error and exits if vault already exists (don't overwrite)",
+        "Typecheck passes"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-009",
+      "title": "Implement 'privault add password' CLI command",
+      "description": "As a user, I need to interactively add a password entry to my vault.",
+      "acceptanceCriteria": [
+        "cli.py 'add' command has subcommand 'password'",
+        "Prompts: site (required), username (required), password (hidden, required), url (optional), notes (optional)",
+        "Unlocks vault by prompting for master password",
+        "Generates entry ID as uuid4",
+        "Encrypts and stores via VaultStorage.write_entry()",
+        "Logs action to AuditLog",
+        "Prints: 'Password for <site> saved.'",
+        "Typecheck passes"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-010",
+      "title": "Implement 'privault get' CLI command",
+      "description": "As a user, I need to retrieve an entry and copy its secret to clipboard.",
+      "acceptanceCriteria": [
+        "cli.py 'get' command takes NAME argument (searches site/title/provider/institution)",
+        "Unlocks vault by prompting for master password",
+        "If multiple matches found, prints numbered list and prompts to choose",
+        "For password entries: copies password field to clipboard with 30s auto-clear",
+        "For health/bank entries: prints all fields to terminal (no clipboard for structured data)",
+        "For note entries: prints body to terminal",
+        "Logs access to AuditLog",
+        "Typecheck passes"
+      ],
+      "priority": 10,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-011",
+      "title": "Implement 'privault add health', 'privault add bank', 'privault add note' commands",
+      "description": "As a user, I need to add health, banking, and note entries to my vault.",
+      "acceptanceCriteria": [
+        "'add health' prompts: provider (required), entry_type (required), value (hidden, required), notes (optional)",
+        "'add bank' prompts: institution (required), account_type (required), account_number (hidden, required), routing_number (optional), notes (optional)",
+        "'add note' prompts: title (required), body (opens $EDITOR or prompts multiline), tags (comma-separated, optional)",
+        "All three use VaultStorage.write_entry() with correct category",
+        "All three log to AuditLog",
+        "All three print confirmation on success",
+        "Typecheck passes"
+      ],
+      "priority": 11,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-012",
+      "title": "Implement 'privault list' and 'privault search' commands",
+      "description": "As a user, I need to see what's in my vault and find specific entries.",
+      "acceptanceCriteria": [
+        "'list' command unlocks vault and calls VaultStorage.list_entries()",
+        "'list --category password|health|bank|note' filters by category",
+        "Displays: ID (first 8 chars), category, name/site, created_at — NO secrets printed",
+        "'search QUERY' unlocks vault, decrypts all entries, searches site/title/provider/institution/tags",
+        "Search is case-insensitive",
+        "Search displays same columns as list (no secrets)",
+        "Typecheck passes"
+      ],
+      "priority": 12,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-013",
+      "title": "Implement 'privault generate' and 'privault lock' commands",
+      "description": "As a user, I need to generate strong passwords and manually lock my vault.",
+      "acceptanceCriteria": [
+        "'generate' command generates a cryptographically random password using secrets module",
+        "'generate --length N' defaults to 24 characters",
+        "'generate --no-symbols' generates alphanumeric only",
+        "Copies generated password to clipboard with 30s auto-clear",
+        "Also prints password to terminal so user can see it",
+        "'lock' command calls VaultSession.lock() and prints: 'Vault locked.'",
+        "Typecheck passes"
+      ],
+      "priority": 13,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-014",
+      "title": "Implement 'privault audit' command and 'privault export' command",
+      "description": "As a user, I need to review my access log and create encrypted backups.",
+      "acceptanceCriteria": [
+        "'audit' command reads AuditLog and prints all entries in a table (timestamp, action, entry_id, category)",
+        "'audit' prints warning if AuditTampered is raised",
+        "'export --out <path>' exports vault.db as an encrypted binary backup (just copies the file)",
+        "Export prints: 'Encrypted backup saved to <path>. Import with privault import.'",
+        "Typecheck passes"
+      ],
+      "priority": 14,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-015",
+      "title": "Add zero-network CI test and coverage gates",
+      "description": "As a developer, I need CI to verify: no outbound network calls, 90%+ coverage, mypy strict passes.",
+      "acceptanceCriteria": [
+        "tests/test_network_isolation.py: patches socket.socket and verifies no test makes a network call",
+        "pytest.ini or pyproject.toml: addopts includes --cov=src/privault --cov-fail-under=90",
+        "mypy section in pyproject.toml: strict = true",
+        ".github/workflows/ci.yml: runs on push/PR, matrix Python 3.10/3.11/3.12",
+        "CI runs: black --check, isort --check-only, flake8, mypy, pytest",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 15,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-016",
+      "title": "Write README.md with threat model, install guide, and usage examples",
+      "description": "As an open source user, I need a clear README so I understand what this protects against and how to use it.",
+      "acceptanceCriteria": [
+        "README.md has sections: The Problem, What privault Does, Threat Model (table), Quickstart, Commands, How It Works (encryption chain), Non-Goals, Contributing",
+        "Quickstart section shows: pip install privault, privault init, privault add password, privault get github.com",
+        "Threat model table lists each threat and mitigation",
+        "Encryption section shows the Argon2id → AES-256-GCM chain in plain language",
+        "CI badge included",
+        "LICENSE file exists (MIT)",
+        "Typecheck passes"
+      ],
+      "priority": 16,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}
